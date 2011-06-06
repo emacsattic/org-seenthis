@@ -150,13 +150,25 @@ list of (key . value) conses."
   (seenthis-insert-entries seenthis-user index))
 
 
+(defun seenthis-create-message-clean-body (body)
+  ""					   
+  (let ((case-fold-search t))
+    (setq body (replace-regexp-in-string "^[ \\t]+" "" body))
+    (message "%s" body)
+    (setq body (replace-regexp-in-string "^#\\+BEGIN_QUOTE\n" "❝" body))
+    (message "%s" body)
+    (setq body (replace-regexp-in-string "\n#\\+END_QUOTE" "❞" body))    
+    (setq body (replace-regexp-in-string "\\[\\[" "" body))
+    (replace-regexp-in-string "\\]\\]" "" body)))
 
-
-
-
-
-
-
+(defun seenthis-create-message-from-subtree ()
+  (interactive)
+  (let ((title (org-get-heading t))
+	(body (org-get-entry))
+	(tags (org-get-tags-at)))
+    (setq body (seenthis-create-message-clean-body body))
+    (setq tags (mapconcat (function (lambda (s) (concat "#" s))) tags " "))
+    (message "%s" (concat title "\n\n" body "\n\n" tags))))
 
 
 (provide 'org-seenthis)
