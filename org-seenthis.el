@@ -31,37 +31,36 @@
 
 (require 'xml)
 
-(defvar seenthis-user nil
+(defvar org-seenthis-user nil
   "If non-nil, will be used as your SeenThis username.")
 
-(defvar seenthis-password nil
+(defvar org-seenthis-password nil
   "If non-nil, will be used as your SeenThis password.")
 
-(defun seenthis-get-auth-info ()
-  (unless seenthis-user
-    (setq seenthis-user (read-string "SeenThis username: ")))
-  (unless seenthis-password
-    (setq seenthis-password (read-passwd "SeenThis password: "))))
+(defun org-seenthis-get-auth-info ()
+  (unless org-seenthis-user
+    (setq org-seenthis-user (read-string "SeenThis username: ")))
+  (unless org-seenthis-password
+    (setq org-seenthis-password (read-passwd "SeenThis password: "))))
 
 
-(defun seenthis-request (method url &optional params)
+(defun org-seenthis-request (method url content-type &optional params)
   "Makes a request to `url' synchronously, notifying `callback'
 when complete. Optionally accepts additional POST `params' as a
 list of (key . value) conses."
-  (seenthis-get-auth-info)
+  (org-seenthis-get-auth-info)
   (let ((url-request-data params)
         (url-request-extra-headers
-         `(("Content-Type" . "application/x-www-form-urlencoded")
+         `(("Content-Type" . content-type)
            ("Authorization" . ,(concat "Basic "
                                        (base64-encode-string
-                                        (concat seenthis-user ":"
-                                                seenthis-password))))))
+                                        (concat org-seenthis-user ":"
+                                                org-seenthis-password))))))
           (url-max-redirecton -1)
           (url-request-method method))
       (url-retrieve-synchronously url)))
 
-
-(defun seenthis-walk (node)
+(defun org-seenthis-walk (node)
   (when (listp node)
     (cond ((string= "id" (xml-node-name node))
 	   (setq id (first (xml-node-children node))))
@@ -84,40 +83,40 @@ list of (key . value) conses."
 			       (if (and (boundp 'link) link) link "")
 			       (if (and (boundp 'summary) summary) summary "")) result)))
 	  (t
-	   (mapc 'seenthis-walk (xml-node-children node))))))
+	   (mapc 'org-seenthis-walk (xml-node-children node))))))
 
-(defun seenthis-parse-entries ()
+(defun org-seenthis-parse-entries ()
   "Parse an xml buffer for seenthis entries"
   (goto-char (point-min))
   (when (search-forward "<feed" nil t)
     (forward-char -5)
     (let (id title published updated link summary result)
-      (seenthis-walk (car (xml-parse-region (point) (point-max))))
+      (org-seenthis-walk (car (xml-parse-region (point) (point-max))))
       (nreverse result))))
 
-(defun seenthis-get-entries (user &optional index)
+(defun org-seenthis-get-entries (user &optional index)
   "Get the entries for the specified user"
   (let ((url (format "https://seenthis.net/api/people/%s/messages/%s" user index)))
    (with-current-buffer
-       (seenthis-request "GET" url) 
-       (seenthis-parse-entries))))
+       (org-seenthis-request "GET" url "application/x-www-form-urlencoded") 
+       (org-seenthis-parse-entries))))
 
-(defun seenthis-convert-summary (summary)
+(defun org-seenthis-convert-summary (summary)
   (setq summary (replace-regexp-in-string "#" "" summary))
   (setq summary (replace-regexp-in-string "❝" "#+BEGIN_QUOTE\n" summary))
   (replace-regexp-in-string "❞" "\n#+END_QUOTE" summary))
 
-(defun seenthis-extract-tag (summary &optional pos)
+(defun org-seenthis-extract-tag (summary &optional pos)
     (when (string-match "\\([#@][-'_[:word:]]+\\)" summary pos)
       (setq tags (cons (match-string 1 summary) tags))
-      (seenthis-extract-tag summary (match-end 1))))
+      (org-seenthis-extract-tag summary (match-end 1))))
 
-(defun seenthis-extract-all-tags (summary)
+(defun org-seenthis-extract-all-tags (summary)
   (let (tags)
-    (seenthis-extract-tag summary)
+    (org-seenthis-extract-tag summary)
     (concat ":" (mapconcat 'identity tags ":") ":")))
 
-(defun seenthis-insert-entry (entry)
+(defun org-seenthis-insert-entry (entry)
   (let ((id (pop entry))
 	(title (pop entry))
 	(published (pop entry))
@@ -133,25 +132,25 @@ list of (key . value) conses."
       (org-set-property "seenthis-link" link)
       (let ((beg (point)))
 	(insert-before-markers 
-	 (concat (seenthis-convert-summary summary) "\n\n"))	
+	 (concat (org-seenthis-convert-summary summary) "\n\n"))	
 	(fill-region beg (point)))
-      (message "%s" (seenthis-extract-all-tags summary))
-      (org-set-tags-to  (seenthis-extract-all-tags summary))
+      (message "%s" (org-seenthis-extract-all-tags summary))
+      (org-set-tags-to  (org-seenthis-extract-all-tags summary))
       )))
 
-(defun seenthis-insert-entries (&optional user index)
+(defun org-seenthis-insert-entries (&optional user index)
   (interactive)
   (let ((index (or index 0))
-	(user (or user seenthis-user)))
-    (mapconcat 'seenthis-insert-entry (seenthis-get-entries user index) "\n")))
+	(user (or user org-seenthis-user)))
+    (mapconcat 'org-seenthis-insert-entry (org-seenthis-get-entries user index) "\n")))
 
-(defun seenthis-insert-my-entries (&optional index)
+(defun org-seenthis-insert-my-entries (&optional index)
   (interactive)
-  (seenthis-insert-entries seenthis-user index))
+  (org-seenthis-insert-entries org-seenthis-user index))
 
 
-(defun seenthis-create-message-clean-body (body)
-  ""					   
+(defun org-seenthis-create-message-clean-body (body)
+  "Cleans the text of an entry before publishing"					   
   (let ((case-fold-search t))
     (setq body (replace-regexp-in-string "^[ \\t]+" "" body))
     (message "%s" body)
@@ -161,14 +160,29 @@ list of (key . value) conses."
     (setq body (replace-regexp-in-string "\\[\\[" "" body))
     (replace-regexp-in-string "\\]\\]" "" body)))
 
-(defun seenthis-create-message-from-subtree ()
+(defun org-seenthis-create-message-from-subtree ()
+  "Generate an atom xml string from the current subtree to be published via the SeenThis API."
   (interactive)
   (let ((title (org-get-heading t))
 	(body (org-get-entry))
 	(tags (org-get-tags-at)))
-    (setq body (seenthis-create-message-clean-body body))
+    (setq body (org-seenthis-create-message-clean-body body))
     (setq tags (mapconcat (function (lambda (s) (concat "#" s))) tags " "))
-    (message "%s" (concat title "\n\n" body "\n\n" tags))))
+    (concat 
+     "<?xml version='1.0' encoding='UTF-8'?>
+<entry xmlns='http://www.w3.org/2005/Atom' xmlns:thr='http://purl.org/syndication/thread/1.0'>"
+title
+"\n\n"
+body
+"\n\n"
+tags
+"</entry>")))
 
+(defun org-seenthis-post-message-from-subtree ()
+  "Post a new entry to SeenThis based on the content of the current subtree."
+  (interactive)
+
+  )
+  
 
 (provide 'org-seenthis)
