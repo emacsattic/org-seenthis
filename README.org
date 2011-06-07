@@ -100,7 +100,7 @@ http://orgmode.org/worg/org-contrib/org-protocol.html
 Then you can use something like the following =org-capture= template to get a
 subtree appropriately formatted to SeenThis :
 
-#+BEGIN_SRC emacs-lisp
+#+BEGIN_EXAMPLE
  (setq org-capture-templates
        '(("z" "Org-protocol Perso" entry 
  	(file+headline "~/org/perso/perso.org" "Inbox") 
@@ -115,7 +115,7 @@ subtree appropriately formatted to SeenThis :
  #+end_quote
 
 "))
-#+END_SRC
+#+END_EXAMPLE
 
 When a new snippet is captured from a web browser or another source with this
 template, the function =org-seenthis-post-entry= can be used directly to
@@ -127,7 +127,7 @@ You can force the creation of a new emacs frame when capturing from your
 browser with =org-protocol=. Just add something like the following to your
 =.emacs= :
 
-#+BEGIN_SRC emacs-lisp
+#+BEGIN_EXAMPLE
   (add-to-list 'org-protocol-protocol-alist
                '("jb-org-capture-new-frame" 
                  :protocol "capture-new-frame" 
@@ -138,7 +138,7 @@ browser with =org-protocol=. Just add something like the following to your
     "Process an org-protocol://capture-new-frame:// style url."
     (make-frame)
     (org-protocol-capture data))
-#+END_SRC
+#+END_EXAMPLE
 
 And then update your browser bookmarklets and replace
 =org-protocol://capture://= occurrences by
