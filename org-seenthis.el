@@ -172,14 +172,14 @@ starting at position `pos'."
       (org-cycle "FOLDED"))))
 
 (defun org-seenthis-get-entries (&optional user index)
-  "Get SeenThis entries from `user', optionnaly starting at
-`index', and insert them as a set of org subtrees.
+  "Get SeenThis entries from `user', optionaly starting at
+`index', and insert them as a set of folded org subtrees.
 
 If `user' is not specified, get entries from
 `org-seenthis-user'."
-  (interactive)
-  (let ((index (or index 0))
-	(user (or user org-seenthis-user)))
+  (interactive "sSeenThis user (default to current user): \nsIndex (default 0):")
+  (let ((index (if (string= index "") org-seenthis-user index))
+	(user (if (string= user "") org-seenthis-user user)))
     (mapconcat 'org-seenthis-insert-entry (org-seenthis-get-entries-from-user-feed user index) "\n")))
 
 
