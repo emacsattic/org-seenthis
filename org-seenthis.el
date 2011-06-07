@@ -43,6 +43,7 @@
   "If non-nil, will be used as your SeenThis password.")
 
 (defun org-seenthis-get-auth-info ()
+  "Get SeenThis authentication informations from variables or prompt."
   (unless org-seenthis-user
     (setq org-seenthis-user (read-string "SeenThis username: ")))
   (unless org-seenthis-password
@@ -110,9 +111,9 @@ indicates the beginning of the first tag for parsing."
     (forward-char (- (length start-string)))
     (let (id title published updated link summary result)
       (org-seenthis-walk (car (xml-parse-region (point) (point-max))))
-      (nreverse result)))))
+      (nreverse result))))
 
-(defun org-seenthis-get-entries (user &optional index)
+(defun org-seenthis-get-entries-from-user-feed (user &optional index)
   "Get the entries for the specified `user'."
   (let ((url (format "https://seenthis.net/api/people/%s/messages/%s" user index)))
    (with-current-buffer
@@ -125,21 +126,28 @@ indicates the beginning of the first tag for parsing."
   (setq summary (replace-regexp-in-string "❝" "#+BEGIN_QUOTE\n" summary))
   (replace-regexp-in-string "❞" "\n#+END_QUOTE" summary))
 
-(defun org-seenthis-extract-tag (summary &optional pos)
-  "Extract next SeenThis tag from the given `summary' optionnaly
+(defun org-seenthis-extract-tags (summary &optional pos)
+  "Extract SeenThis tags from the given `summary' optionnaly
 starting at position `pos'."
-    (when (string-match "\\([#@][-'_[:word:]]+\\)" summary pos)
-      (setq tags (cons (match-string 1 summary) tags))
-      (org-seenthis-extract-tag summary (match-end 1))))
+  (setq pos (if pos pos 0))
+  (when (string-match "\\([#@][-'_[:word:]]+\\)" summary pos)
+    (let ((tag (match-string 1 summary)))
+      (setq tag (replace-regexp-in-string "#" "" tag))
+      (setq tags (cons tag tags))
+      (org-seenthis-extract-tags summary (match-end 1)))))
 
 (defun org-seenthis-extract-all-tags (summary)
   "Extract all SeenThis tags from `summary'."
-  (let (tags)
-    (org-seenthis-extract-tag summary)
-    (concat ":" (mapconcat 'identity tags ":") ":")))
+  (let (tags (tag nil))
+    (setq tag (org-seenthis-extract-tag summary))
+    (while tag
+      
+    (concat ":" (mapconcat 'identity tags ":") ":"))))
 
 (defun org-seenthis-insert-entry (entry)
-  (let ((id (pop entry))
+  "Inserts SeenThis parsed `entry' as an org subtree."
+  (let (tags
+	(id (pop entry))
 	(title (pop entry))
 	(published (pop entry))
 	(updated (pop entry))
@@ -151,24 +159,28 @@ starting at position `pos'."
       (org-set-property "seenthis-id" id)
       (org-set-property "seenthis-published" published)
       (org-set-property "seenthis-updated" updated)
-      (org-set-property "seenthis-link" link)
+      (org-set-property "seenthis-url" link)
       (let ((beg (point)))
 	(insert-before-markers 
 	 (concat (org-seenthis-convert-summary summary) "\n\n"))	
-	(fill-region beg (point)))
-      (message "%s" (org-seenthis-extract-all-tags summary))
-      (org-set-tags-to  (org-seenthis-extract-all-tags summary))
-      )))
+	(fill-region beg (point))
+	(indent-region beg (point)))
+      (org-seenthis-extract-tags summary)
+      (message "%s" tags)
+      (org-set-tags-to (concat ":" (mapconcat 'identity tags ":") ":"))
+      (org-back-to-heading)
+      (org-cycle "FOLDED"))))
 
-(defun org-seenthis-insert-entries (&optional user index)
+(defun org-seenthis-get-entries (&optional user index)
+  "Get SeenThis entries from `user', optionnaly starting at
+`index', and insert them as a set of org subtrees.
+
+If `user' is not specified, get entries from
+`org-seenthis-user'."
   (interactive)
   (let ((index (or index 0))
 	(user (or user org-seenthis-user)))
-    (mapconcat 'org-seenthis-insert-entry (org-seenthis-get-entries user index) "\n")))
-
-(defun org-seenthis-insert-my-entries (&optional index)
-  (interactive)
-  (org-seenthis-insert-entries org-seenthis-user index))
+    (mapconcat 'org-seenthis-insert-entry (org-seenthis-get-entries-from-user-feed user index) "\n")))
 
 
 (defun org-seenthis-clean-body (body)
@@ -230,17 +242,13 @@ starting at position `pos'."
 	  (org-set-property "seenthis-id" id)
 	  (org-set-property "seenthis-published" published)
 	  (org-set-property "seenthis-updated" updated)
-	  (org-set-property "seenthis-link" link)
+	  (org-set-property "seenthis-url" link)
 	  (message "%s" "Entry published succesfully !"))
       (progn 
 	(pop-to-buffer result-buffer)
 	(error "Entry has not been published !")))
     ))
 
-
-
-
-(provide 'org-seenthis)
 
 (provide 'org-seenthis)
 
