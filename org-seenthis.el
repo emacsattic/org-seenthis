@@ -28,9 +28,9 @@
 ;; https://launchpad.net/atompub.el
 
 
-
 ;;; Commentary:
 
+;;; For installation and usage, see README.org
 
 ;;; Code:
 
