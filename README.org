@@ -1,0 +1,171 @@
+#+TITLE: org-seenthis.el README
+#+AUTHOR: Julien Barnier <julien@nozav.org>
+
+* What is it
+
+=org-seenthis.el= is an attempt to provide an interface between Emacs'
+[[http://orgmode.org][org-mode]] and [[http://seenthis.net][SeenThis]]. The project provides some basic functionality but is
+still at an early stage.
+
+* Installation and setup
+
+Grab the latest =org-seenthis.el= version from GitHub :
+
+#+BEGIN_SRC sh
+cd ~/.emacs.d
+git clone https://github.com/juba/org-seenthis.git
+#+END_SRC
+
+Then add the org-seenthis directory to your =load-path= and load it by adding
+something like this to your =.emacs= :
+
+#+BEGIN_SRC emacs-lisp :results silent
+(add-to-list 'load-path "~/.emacs.d/org-seenthis")
+(require 'org-seenthis)
+#+END_SRC
+
+To use the SeenThis API you have to sign up for an account and provide your
+username and password. This can be done by prompt when needed, or by setting
+up the following variables :
+
+#+BEGIN_SRC emacs-lisp :results silent
+(setq org-seenthis-user "myuser")
+(setq org-seenthis-password "mypass")
+#+END_SRC
+
+* Usage
+
+For the moment, only two basic functionalities are provided : one to get a set
+of SeenThis entries from a user feed and convert them as org-mode subtrees,
+and one to post a new entry to SeenThis from an existing org-mode subtree.
+
+** Getting entries from SeenThis to org-mode
+
+To get the latest entries from a SeenThis user, just place your point at the
+place you want the new entries to be inserted, and use =M-x
+org-seenthis-get-entries=.
+
+You will then be prompted for a SeenThis user name (default to the one in
+=org-seenthis-user=, ie yourself). A request will be made to the API, and the
+latest entries will be converted, each as an org-mode subtree, and inserted
+in the current org-mode file.
+
+You can pass a prefix argument to the function to get older entries. Something
+like : =C-u 25 M-x org-seenthis-get-entries=.
+
+The entry content will be converted as follows : citations will be put in a
+=quote= block, SeenThis tags will be inserted as subtree tags, and
+some additional informations such as the SeenThis id, dates and url will be
+inserted as subtree properties.
+
+** Post an org-mode subtree as a SeenThis entry
+
+To post an org-mode subtree as a Seenthis entry, it has to follow a certain
+structure. Something like :
+
+#+BEGIN_EXAMPLE
+ * My entry title                      :tag1:tag2:tag3:
+
+ http://thisisthemainurloftheentry.com/
+
+ #+BEGIN_QUOTE
+ This is a citation for my entry
+ #+END_QUOTE
+
+ And this is a comment for my entry
+#+END_EXAMPLE
+
+If you place your point in this subtree and use =M-x org-seenthis-post-entry=,
+it will be converted appropriately and posted to your SeenThis account.
+
+Once posted successfully, some properties will be added to the subtree, such as
+the SeenThis message id. When these properties are found, the next call to
+=org-seenthis-post-entry= will not create a new entry on SeenThis but instead
+replace and update the existing one (=PUT= request instead of =POST=).
+
+* Integration with =org-capture= and =org-protocol=
+
+[[http://orgmode.org/manual/Capture.html][org-capture]] is an org-mode set of functions that allows to quickly add a new
+entry to an org-mode subtree. [[http://orgmode.org/worg/org-contrib/org-protocol.html][org-protocol]] is an org-mode contrib that allows
+to call =org-capture= directly from your browser. It can achieve quite similar
+functionalities as the SeenThis bookmarklet.
+
+** Setup
+
+First you have to install and setup =org-protocol=. Please follow the detailed
+instructions at the project page :
+
+http://orgmode.org/worg/org-contrib/org-protocol.html
+
+Then you can use something like the following =org-capture= template to get a
+subtree appropriately formatted to SeenThis :
+
+#+BEGIN_SRC emacs-lisp
+(setq org-capture-templates
+      '(("z" "Org-protocol Perso" entry
+	(file+headline "~/org/perso/perso.org" "Inbox") 
+	"*** %:description %^g
+:PROPERTIES:
+:created: %U
+:END:
+%:link
+%?
+#+begin_quote
+%i
+#+end_quote
+
+"))
+#+END_SRC
+
+When a new snippet is captured from a web browser or another source with this
+template, the function =org-seenthis-post-entry= can be used directly to
+publish it on SeenThis.
+
+** Small tricks
+
+You can force the creation of a new emacs frame when capturing from your
+browser with =org-protocol=. Just add something like the following to your
+=.emacs= :
+
+#+BEGIN_SRC emacs-lisp
+  (add-to-list 'org-protocol-protocol-alist
+               '("jb-org-capture-new-frame" 
+                 :protocol "capture-new-frame" 
+                 :function jb-org-protocol-capture-new-frame 
+                 :kill-client t))
+  
+  (defun jb-org-protocol-capture-new-frame (data)
+    "Process an org-protocol://capture-new-frame:// style url."
+    (make-frame)
+    (org-protocol-capture data))
+#+END_SRC
+
+And then update your browser bookmarklets and replace
+=org-protocol://capture://= occurrences by
+=org-protocol://capture-new-frame://=.
+
+Sometimes you may also be annoyed but repetitive /Buffer still has clients,
+kill it?/ messages. To suppress them just add this to your =.emacs=, but
+*after* the =(server-start)= directive :
+
+#+BEGIN_SRC emacs-lisp
+(remove-hook 'kill-buffer-query-functions 'server-kill-buffer-query-function)
+#+END_SRC
+
+Source :  http://shreevatsa.wordpress.com/2007/01/06/using-emacsclient/
+
+* Known bugs and limitations
+
+  Many many many. the code has been sparsely tested and lacks most of needed
+  error checking.
+
+  The following bugs and limitations are already known :
+
+  - org-mode markup such as *bold* or /italic/ is not converted when posting
+    to SeenThis
+  - local file or image links are not exported properly when posting to
+    SeenThis
+  - Both entries and comments are retrieved when importing from SeenThis
+  - If there is a line of tags at the end of an entry, it is not deleted when
+    importing from SeenThis, but the =#= are removed at the start of each tag
+
