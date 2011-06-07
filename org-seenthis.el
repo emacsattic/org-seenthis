@@ -50,9 +50,9 @@
 
 
 (defun org-seenthis-request (method url content-type &optional params)
-  "Makes a request to `url' synchronously, notifying `callback'
-when complete. Optionally accepts additional POST `params' as a
-list of (key . value) conses."
+  "Makes a request to `url' synchronously, with the `method' and
+`content-type' specified. Optionally accepts additional POST
+`params' as a list of (key . value) conses."
   (org-seenthis-get-auth-info)
   (let ((url-request-data params)
         (url-request-extra-headers
@@ -65,7 +65,19 @@ list of (key . value) conses."
           (url-request-method method))
       (url-retrieve-synchronously url)))
 
+(defun org-seenthis-encode-string-to-utf (string)
+  "Encode `string' to utf-8 encoding."
+  (let ((temp-file-name (make-temp-file "atom-api"))
+ 	(coding-system-for-write 'utf-8)
+ 	(coding-system-for-read 'binary))
+     (with-temp-file temp-file-name
+       (insert string))
+     (with-temp-buffer
+       (insert-file-contents-literally temp-file-name)
+       (buffer-string))))
+
 (defun org-seenthis-walk (node)
+  "Walks an xml parsed structure to extract values."
   (when (listp node)
     (cond ((string= "id" (xml-node-name node))
 	   (setq id (first (xml-node-children node))))
@@ -90,33 +102,38 @@ list of (key . value) conses."
 	  (t
 	   (mapc 'org-seenthis-walk (xml-node-children node))))))
 
-(defun org-seenthis-parse-entries ()
-  "Parse an xml buffer for seenthis entries"
+(defun org-seenthis-parse (start-string)
+  "Parse an xml buffer for seenthis entries. `start-string'
+indicates the beginning of the first tag for parsing."
   (goto-char (point-min))
-  (when (search-forward "<feed" nil t)
-    (forward-char -5)
+  (when (search-forward start-string nil t)
+    (forward-char (- (length start-string)))
     (let (id title published updated link summary result)
       (org-seenthis-walk (car (xml-parse-region (point) (point-max))))
-      (nreverse result))))
+      (nreverse result)))))
 
 (defun org-seenthis-get-entries (user &optional index)
-  "Get the entries for the specified user"
+  "Get the entries for the specified `user'."
   (let ((url (format "https://seenthis.net/api/people/%s/messages/%s" user index)))
    (with-current-buffer
        (org-seenthis-request "GET" url "application/x-www-form-urlencoded") 
-       (org-seenthis-parse-entries))))
+       (org-seenthis-parse "<feed"))))
 
 (defun org-seenthis-convert-summary (summary)
+  "Convert SeenThis markup into org-mode markup."
   (setq summary (replace-regexp-in-string "#" "" summary))
   (setq summary (replace-regexp-in-string "❝" "#+BEGIN_QUOTE\n" summary))
   (replace-regexp-in-string "❞" "\n#+END_QUOTE" summary))
 
 (defun org-seenthis-extract-tag (summary &optional pos)
+  "Extract next SeenThis tag from the given `summary' optionnaly
+starting at position `pos'."
     (when (string-match "\\([#@][-'_[:word:]]+\\)" summary pos)
       (setq tags (cons (match-string 1 summary) tags))
       (org-seenthis-extract-tag summary (match-end 1))))
 
 (defun org-seenthis-extract-all-tags (summary)
+  "Extract all SeenThis tags from `summary'."
   (let (tags)
     (org-seenthis-extract-tag summary)
     (concat ":" (mapconcat 'identity tags ":") ":")))
@@ -154,7 +171,7 @@ list of (key . value) conses."
   (org-seenthis-insert-entries org-seenthis-user index))
 
 
-(defun org-seenthis-create-message-clean-body (body)
+(defun org-seenthis-clean-body (body)
   "Cleans the text of an entry before publishing"					   
   (let ((case-fold-search t))
     (setq body (replace-regexp-in-string "^[ \\t]+" "" body))
@@ -164,40 +181,33 @@ list of (key . value) conses."
     (setq body (replace-regexp-in-string "\\[\\[" "" body))
     (replace-regexp-in-string "\\]\\]" "" body)))
 
-(defun org-seenthis-create-message-from-subtree ()
+(defun org-seenthis-create-entry-from-subtree ()
   "Generate an atom xml string from the current subtree to be published via the SeenThis API."
   (interactive)
   (let ((title (org-get-heading t))
 	(body (org-get-entry))
 	(tags (org-get-tags-at))
 	(id (org-entry-get (point) "seenthis-id")))
-    (setq body (org-seenthis-create-message-clean-body body))
+    (setq body (org-seenthis-clean-body body))
     (setq tags (mapconcat (function (lambda (s) (concat "#" s))) tags " "))
-    (org-seenthis-encode-string-to-utf (concat 
-     "<?xml version='1.0' encoding='UTF-8'?>
-<entry xmlns='http://www.w3.org/2005/Atom' xmlns:thr='http://purl.org/syndication/thread/1.0'>\n"
-(if id (format "<id>%s</id>" id))
-"<summary><![CDATA["
-title
-"\n\n"
-body
-"\n\n"
-tags
-"]]></summary>"
-"</entry>"))))
+    (setq id (if id (format "<id>%s</id>" id) ""))
+    (org-seenthis-encode-string-to-utf 
+     (format "<?xml version='1.0' encoding='UTF-8'?>
+<entry xmlns='http://www.w3.org/2005/Atom' xmlns:thr='http://purl.org/syndication/thread/1.0'>
+%s
+<summary><![CDATA[%s
 
-(defun org-seenthis-post-message-from-subtree ()
+%s
+
+%s]]></summary>
+</entry>" id title body tags))))
+
+(defun org-seenthis-post-entry ()
   "Post a new entry to SeenThis based on the content of the current subtree."
   (interactive)
-  (let ((xml (org-seenthis-create-message-from-subtree))
-	(is-edit (org-entry-get (point) "seenthis-id"))
-	(result-buffer nil)
-	(result-ok)
-	(id nil)
-	(title nil)
-	(published nil)
-	(updated nil)
-	(link nil))
+  (let (result-buffer result-ok id title published updated link
+		      (xml (org-seenthis-create-entry-from-subtree))
+		      (is-edit (org-entry-get (point) "seenthis-id")))
     (setq result-buffer 
 	  (org-seenthis-request 
 	   (if is-edit "PUT" "POST")
@@ -211,7 +221,7 @@ tags
 	(progn
 	  (save-excursion
 	    (set-buffer result-buffer)
-	    (setq result (car (org-seenthis-parse-result))))
+	    (setq result (car (org-seenthis-parse "<entry"))))
 	  (setq id (pop result)
 		title (pop result)
 		published (pop result)
@@ -223,29 +233,15 @@ tags
 	  (org-set-property "seenthis-link" link)
 	  (message "%s" "Entry published succesfully !"))
       (progn 
-	(warn "Error : entry has not been published !")
-	(pop-to-buffer result-buffer)))
+	(pop-to-buffer result-buffer)
+	(error "Entry has not been published !")))
     ))
 
 
-(defun org-seenthis-parse-result ()
-  "Parse an xml buffer sent back from a POST or PUT request"
-  (goto-char (point-min))
-  (when (search-forward "<entry" nil t)
-    (forward-char -6)
-    (let (id title published updated link summary result)
-      (org-seenthis-walk (car (xml-parse-region (point) (point-max))))
-      (nreverse result))))
-  
-(defun org-seenthis-encode-string-to-utf (string)
-  (let ((temp-file-name (make-temp-file "atom-api"))
- 	(coding-system-for-write 'utf-8)
- 	(coding-system-for-read 'binary))
-     (with-temp-file temp-file-name
-       (insert string))
-     (with-temp-buffer
-       (insert-file-contents-literally temp-file-name)
-       (buffer-string))))
 
 
 (provide 'org-seenthis)
+
+(provide 'org-seenthis)
+
+;;; org-seenthis.el ends here
