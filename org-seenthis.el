@@ -21,8 +21,13 @@
 ;; Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston,
 ;; MA 02111-1307, USA.
 
-;; Part of this codes come from org-ghi.el by Puneeth Chaganti :
+;; Part of this code come from org-ghi.el by Puneeth Chaganti :
 ;; https://github.com/punchagan/org-ghi
+
+;; Part of this code come from atom-api.el by Erik Hetzner :
+;; https://launchpad.net/atompub.el
+
+
 
 ;;; Commentary:
 
@@ -51,7 +56,7 @@ list of (key . value) conses."
   (org-seenthis-get-auth-info)
   (let ((url-request-data params)
         (url-request-extra-headers
-         `(("Content-Type" . content-type)
+         `(("Content-Type" . ,content-type)
            ("Authorization" . ,(concat "Basic "
                                        (base64-encode-string
                                         (concat org-seenthis-user ":"
@@ -153,9 +158,8 @@ list of (key . value) conses."
   "Cleans the text of an entry before publishing"					   
   (let ((case-fold-search t))
     (setq body (replace-regexp-in-string "^[ \\t]+" "" body))
-    (message "%s" body)
+    (setq body (replace-regexp-in-string ":PROPERTIES:\\(.\\|\n\\)+?:END:" "" body))
     (setq body (replace-regexp-in-string "^#\\+BEGIN_QUOTE\n" "❝" body))
-    (message "%s" body)
     (setq body (replace-regexp-in-string "\n#\\+END_QUOTE" "❞" body))    
     (setq body (replace-regexp-in-string "\\[\\[" "" body))
     (replace-regexp-in-string "\\]\\]" "" body)))
@@ -165,24 +169,83 @@ list of (key . value) conses."
   (interactive)
   (let ((title (org-get-heading t))
 	(body (org-get-entry))
-	(tags (org-get-tags-at)))
+	(tags (org-get-tags-at))
+	(id (org-entry-get (point) "seenthis-id")))
     (setq body (org-seenthis-create-message-clean-body body))
     (setq tags (mapconcat (function (lambda (s) (concat "#" s))) tags " "))
-    (concat 
+    (org-seenthis-encode-string-to-utf (concat 
      "<?xml version='1.0' encoding='UTF-8'?>
-<entry xmlns='http://www.w3.org/2005/Atom' xmlns:thr='http://purl.org/syndication/thread/1.0'>"
+<entry xmlns='http://www.w3.org/2005/Atom' xmlns:thr='http://purl.org/syndication/thread/1.0'>\n"
+(if id (format "<id>%s</id>" id))
+"<summary><![CDATA["
 title
 "\n\n"
 body
 "\n\n"
 tags
-"</entry>")))
+"]]></summary>"
+"</entry>"))))
 
 (defun org-seenthis-post-message-from-subtree ()
   "Post a new entry to SeenThis based on the content of the current subtree."
   (interactive)
+  (let ((xml (org-seenthis-create-message-from-subtree))
+	(is-edit (org-entry-get (point) "seenthis-id"))
+	(result-buffer nil)
+	(result-ok)
+	(id nil)
+	(title nil)
+	(published nil)
+	(updated nil)
+	(link nil))
+    (setq result-buffer 
+	  (org-seenthis-request 
+	   (if is-edit "PUT" "POST")
+	   "https://seenthis.net/api/messages" 
+	   "application/atom+xml;type=entry;charset=utf-8" xml))
+    (save-excursion
+      (set-buffer result-buffer)
+      (goto-char (point-min))
+      (setq result-ok (search-forward "<id>message:" nil t)))
+    (if result-ok
+	(progn
+	  (save-excursion
+	    (set-buffer result-buffer)
+	    (setq result (car (org-seenthis-parse-result))))
+	  (setq id (pop result)
+		title (pop result)
+		published (pop result)
+		updated (pop result)
+		link (pop result))
+	  (org-set-property "seenthis-id" id)
+	  (org-set-property "seenthis-published" published)
+	  (org-set-property "seenthis-updated" updated)
+	  (org-set-property "seenthis-link" link)
+	  (message "%s" "Entry published succesfully !"))
+      (progn 
+	(warn "Error : entry has not been published !")
+	(pop-to-buffer result-buffer)))
+    ))
 
-  )
+
+(defun org-seenthis-parse-result ()
+  "Parse an xml buffer sent back from a POST or PUT request"
+  (goto-char (point-min))
+  (when (search-forward "<entry" nil t)
+    (forward-char -6)
+    (let (id title published updated link summary result)
+      (org-seenthis-walk (car (xml-parse-region (point) (point-max))))
+      (nreverse result))))
   
+(defun org-seenthis-encode-string-to-utf (string)
+  (let ((temp-file-name (make-temp-file "atom-api"))
+ 	(coding-system-for-write 'utf-8)
+ 	(coding-system-for-read 'binary))
+     (with-temp-file temp-file-name
+       (insert string))
+     (with-temp-buffer
+       (insert-file-contents-literally temp-file-name)
+       (buffer-string))))
+
 
 (provide 'org-seenthis)
