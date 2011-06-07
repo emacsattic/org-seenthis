@@ -177,8 +177,8 @@ starting at position `pos'."
 
 If `user' is not specified, get entries from
 `org-seenthis-user'."
-  (interactive "sSeenThis user (default to current user): \nsIndex (default 0):")
-  (let ((index (if (string= index "") org-seenthis-user index))
+  (interactive "sSeenThis user (default to current user): \nP")
+  (let ((index (if index index 0))
 	(user (if (string= user "") org-seenthis-user user)))
     (mapconcat 'org-seenthis-insert-entry (org-seenthis-get-entries-from-user-feed user index) "\n")))
 
