@@ -1,4 +1,4 @@
-#+TITLE: org-seenthis.el README
+#+TITLE: README for org-seenthis.el
 #+AUTHOR: Julien Barnier <julien@nozav.org>
 
 * What is it
@@ -64,9 +64,9 @@ To post an org-mode subtree as a Seenthis entry, it has to follow a certain
 structure. Something like :
 
 #+BEGIN_EXAMPLE
- * My entry title                      :tag1:tag2:tag3:
+ * Title of my entry                       :tag1:tag2:tag3:
 
- http://thisisthemainurloftheentry.com/
+ http://urlofmyentry.com/
 
  #+BEGIN_QUOTE
  This is a citation for my entry
@@ -101,18 +101,18 @@ Then you can use something like the following =org-capture= template to get a
 subtree appropriately formatted to SeenThis :
 
 #+BEGIN_SRC emacs-lisp
-(setq org-capture-templates
-      '(("z" "Org-protocol Perso" entry
-	(file+headline "~/org/perso/perso.org" "Inbox") 
-	"*** %:description %^g
-:PROPERTIES:
-:created: %U
-:END:
-%:link
-%?
-#+begin_quote
-%i
-#+end_quote
+ (setq org-capture-templates
+       '(("z" "Org-protocol Perso" entry 
+ 	(file+headline "~/org/perso/perso.org" "Inbox") 
+ 	"*** %:description %^g
+ :PROPERTIES:
+ :created: %U
+ :END:
+ %:link
+ %?
+ #+begin_quote
+ %i
+ #+end_quote
 
 "))
 #+END_SRC
