@@ -188,8 +188,9 @@ If `user' is not specified, get entries from
     (setq body (replace-regexp-in-string "^[ \\t]+" "" body))
     (setq body (replace-regexp-in-string ":PROPERTIES:\\(.\\|\n\\)+?:END:" "" body))
     (setq body (replace-regexp-in-string "^#\\+BEGIN_QUOTE\n" "❝" body))
-    (setq body (replace-regexp-in-string "\n#\\+END_QUOTE" "❞" body))    
+    (setq body (replace-regexp-in-string "\n#\\+END_QUOTE" "❞" body))
     (setq body (replace-regexp-in-string "\\[\\[" "" body))
+    (setq body (replace-regexp-in-string "\\([^\n]\\)\n\\([^\n]\\)" "\\1 \\2" body))
     (replace-regexp-in-string "\\]\\]" "" body)))
 
 (defun org-seenthis-create-entry-from-subtree ()
