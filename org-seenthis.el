@@ -141,7 +141,6 @@ starting at position `pos'."
   (let (tags (tag nil))
     (setq tag (org-seenthis-extract-tag summary))
     (while tag
-      
     (concat ":" (mapconcat 'identity tags ":") ":"))))
 
 (defun org-seenthis-insert-entry (entry)
@@ -201,6 +200,7 @@ If `user' is not specified, get entries from
 	(tags (org-get-tags-at))
 	(id (org-entry-get (point) "seenthis-id")))
     (setq body (org-seenthis-clean-body body))
+    (setq tags (delete "ATTACH" tags))
     (setq tags (mapconcat (function (lambda (s) (concat "#" s))) tags " "))
     (setq id (if id (format "<id>%s</id>" id) ""))
     (org-seenthis-encode-string-to-utf 
